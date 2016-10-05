@@ -2,6 +2,7 @@
 
 require 'httmultiparty'
 require 'trollop'
+require 'yaml'
 
 class Slackcat
   include HTTMultiParty
@@ -90,9 +91,20 @@ class Slackcat
 
 end
 
+
+def local_settings
+	@local_settings ||= File.exists?(".slackcat") ? YAML.load_file('.slackcat') : nil
+end
+
+
+def default_channel
+	local_settings ?  local_settings["default_channel"] : ''
+end
+
 opts = Trollop::options do
+
   opt :token,           'Slack API token',            type: :string,  short: 'k', default: ENV.fetch('SLACK_TOKEN', nil)
-  opt :channels,        'Channels to share',          type: :string,  short: 'c', default: ''
+	opt :channels,        'Channels to share',          type: :string,  short: 'c', default: default_channel
   opt :groups,          'Groups to share',            type: :string,  short: 'g', default: ''
   opt :users,           'Users (DMs) to share',       type: :string,  short: 'u', default: ''
   opt :filetype,        'File type identifier',       type: :string,  short: 't'
@@ -103,7 +115,17 @@ opts = Trollop::options do
   opt :multipart,       'Multipart upload each file', type: :boolean, short: 'm', default: false
   opt :download,        'Download a linked file',     type: :string,  short: 'd'
   opt :save_as,         'Save downloaded file as',    type: :string,  short: 's'
+	opt :local_channel, 	'Set the default channel for the current directory', type: :string, short: "l"
 end
+
+
+if opts[:local_channel]
+	value =  opts[:local_channel]
+	settings = {"default_channel" => value}
+	File.open('.slackcat', 'w') {|f| f.write settings.to_yaml }
+	exit
+end
+
 
 raise 'set slack API token using SLACK_TOKEN or -k option' unless opts[:token]
 slack = Slackcat.new(opts[:token])

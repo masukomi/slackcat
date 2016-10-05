@@ -39,6 +39,7 @@ derivatives, you need to install the `ruby-dev` package.
             --multipart, -m:   Multipart upload each file
          --download, -d <s>:   Download a linked file
           --save-as, -s <s>:   Save downloaded file as
+	  --local_channel, -l <s>:   Generate a .slackcat file with the default channel
                  --help, -h:   Show this message
 ```
 
