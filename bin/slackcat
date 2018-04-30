@@ -1,9 +1,7 @@
 #!/usr/bin/env ruby
-
 require 'httmultiparty'
 require 'trollop'
 require 'yaml'
-
 class Slackcat
   include HTTMultiParty
   base_uri 'https://slack.com/api'
@@ -97,14 +95,28 @@ end
 
 
 def local_settings
-  @local_settings ||= File.exists?(".slackcat") ? YAML.load_file('.slackcat') : nil
+  if File.exists?(".slackcat")
+    @local_settings = YAML.load_file('.slackcat')
+  elsif File.exists?("#{ENV['HOME']}/.slackcat")
+    @local_settings = YAML.load_file("#{ENV['HOME']}/.slackcat")
+  else
+    @locat_settings = nil
+  end
 end
-
 
 def default_channel
   local_settings ?  local_settings["default_channel"] : ''
 end
 
+def something_to_do?(opts)
+  if opts[:post] || opts[:multipart] || opts[:download]
+    true
+  elsif (ARGF.pos.zero? rescue true) #testing if there's an ARGF to read
+    true
+  else
+    false
+  end
+end
 opts = Trollop::options do
 
   opt :token,           'Slack API token',            type: :string,  short: 'k', default: ENV.fetch('SLACK_TOKEN', nil)
@@ -122,7 +134,6 @@ opts = Trollop::options do
   opt :local_channel,   'Set the default channel for the current directory', type: :string, short: "l"
 end
 
-
 if opts[:local_channel]
   value =  opts[:local_channel]
   settings = {"default_channel" => value}
@@ -130,10 +141,15 @@ if opts[:local_channel]
   exit
 end
 
+if ! something_to_do? opts
+  #have it send out help doc
+  $stderr.puts("Nothing to do. Please run with --help for usage.")
+  exit(1)
+end
+
 
 raise 'set slack API token using SLACK_TOKEN or -k option' unless opts[:token]
 slack = Slackcat.new(opts[:token])
-
 ## use default channel if no destination given
 if opts.values_at(:channels, :groups, :users).all?(&:empty?)
   opts[:channels] = ENV.fetch('SLACK_CHANNEL', '')
@@ -146,11 +162,9 @@ existing_channel_names = individual_channel_names.select {|name| slack.channel_b
 (individual_channel_names - existing_channel_names).each do |name|
   puts "skipping channel #{name}: not available (maybe use -g for group?)"
 end
-
 channels = existing_channel_names.map do |name|
   slack.channel_by(name).fetch('id')
 end
-
 groups = opts[:groups].split(/[\s,]+/).map do |name|
   slack.groups.find { |group| group['name'] == name }.fetch('id')
 end
@@ -184,5 +198,10 @@ elsif opts[:download] #download a linked file
   dst  = slack.download({file: file}, opts[:save_as])
   puts "File downloaded to #{dst}"
 else #upload concatenated text snippet
-  slack.upload(params.merge(content: ARGF.read))
+  if (ARGF.pos.zero? rescue true) #testing if there's an ARGF to read
+    slack.upload(params.merge(content: ARGF.read))
+  else
+    $stderr.puts("nothing to do")
+    exit(1)
+  end
 end
